@@ -1,0 +1,218 @@
+def hostsIPsMap = [
+  'q5': '10.21.61.183',
+  'q7': '10.21.61.193'  
+  ]
+
+def SERVER_DEPLOY="10.21.61.193"
+SERVER_DEPLOY = hostsIPsMap[DESTINO]
+
+pipeline {
+  agent any
+    environment {
+      branch="${branch}"
+      pathfuse="${env.pathfuse}"
+      profile=("$DESTINO"+"-"+"$env.perfil_fuse")
+      propertiesboolean="${env.cargarproperties}"
+      nexusurl="http://10.20.78.193:8081/nexus/content/repositories/jboss-fuse-qa"
+      redhatgaurl="http://10.20.78.193:8081/nexus/content/repositories/redhat-ga-repository/"
+      reponame="constanciadeprepago"
+      jobname="${env.JOB_NAME}"
+      repobash="storage"
+      namesonar="aconstanciadeprepago_qa"
+      ambiente="qa"
+  }      
+    options {
+      timestamps()
+      timeout(time: 30, unit: 'MINUTES')
+      disableConcurrentBuilds()
+    }    
+
+    tools {
+      maven 'Maven'
+    }
+    stages {
+      stage('Clone') {
+        steps {
+          script {
+            if (params.perfil_fuse  == '') {
+            error("El campo perfil_fuse es obligatorio")
+            }  else {              
+            withCredentials([usernamePassword(credentialsId: 'jenkinsfuseqa', passwordVariable: 'password', usernameVariable: 'userpass')]) {
+              dir('servicio') {      
+            checkout([$class: 'GitSCM', branches: [[name: env.branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'git@bitbucket.org:coopeuch/'+ env.reponame +'.git']]]) 
+          }
+        }
+              dir('storage') {
+          print "SERVER DEPLOY : " + SERVER_DEPLOY
+            if (SERVER_DEPLOY ==  '10.21.61.193') {
+              error("El campo Destino es obligatorio")
+            }               
+              else if (SERVER_DEPLOY ==  '10.21.61.183') {              
+            checkout([$class: 'GitSCM', branches: [[name: env.branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'git@bitbucket.org:coopeuch/'+ env.repobash +'.git']]])
+              sh "sshpass -p $passworduserjenkinsqa scp -P 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 Fuse/testing_properties.sh Fuse/testing_fileprofile.sh Fuse/testing_jenkinsdeployfuse.sh jenkins@${SERVER_DEPLOY}:/home/COOPEUCH1.CL/jenkins/script/"
+            }
+              else if (SERVER_DEPLOY ==  '10.20.73.21') {              
+            checkout([$class: 'GitSCM', branches: [[name: env.branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'git@bitbucket.org:coopeuch/'+ env.repobash +'.git']]])
+              sh "sshpass -p $passworduserjenkinsqa scp -P 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 Fuse/testing_properties.sh Fuse/testing_fileprofile.sh Fuse/testing_jenkinsdeployfuse.sh jenkins@${SERVER_DEPLOY}:/home/COOPEUCH1.CL/jenkins/script/"
+            }
+              else if (SERVER_DEPLOY ==  '10.20.73.160') {              
+            checkout([$class: 'GitSCM', branches: [[name: env.branch]], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[url: 'git@bitbucket.org:coopeuch/'+ env.repobash +'.git']]])
+              sh "sshpass -p $passworduserjenkinsqa scp -P 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 Fuse/testing_properties.sh Fuse/testing_fileprofile.sh Fuse/testing_jenkinsdeployfuse.sh jenkins@${SERVER_DEPLOY}:/home/COOPEUCH1.CL/jenkins/script/"
+            }
+          }   
+        }
+      }           
+    }
+  }
+    stage('Build') {
+      steps {
+        dir('servicio') {
+          sh 'mvn clean compile'
+        }   
+      }
+    }
+    stage('Sonar') {
+      environment {
+        SCANNER_HOME = tool 'sonar'
+        ORGANIZATION = "coopeuch"
+        PROJECT_NAME = '${namesonar}'
+      }
+      steps {
+        dir('servicio') {
+          withSonarQubeEnv('Sonar') {
+            sh '''$SCANNER_HOME/bin/sonar-scanner \
+            -Dsonar.java.binaries=target \
+            -Dsonar.projectKey=${namesonar} \
+            -Dsonar.sources=src'''
+          }
+        }
+      }
+    }
+    stage('deploy nexus') {
+      steps {
+        script {
+          dir('servicio') {
+            sh  """    
+            sed -i 's!\${nexus.ambiente}!jboss-fuse-qa!' pom.xml
+            sed -i 's!\${nexus.url}!\${nexusurl}!' pom.xml
+            sed -i 's!\${redhat.ga.url}!\${redhatgaurl}!' pom.xml
+            mvn clean deploy
+                """
+            }
+          }
+        }       
+      }
+    stage('properties') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'jenkinsfuseqa', passwordVariable: 'password', usernameVariable: 'userpass')]) {
+          script {                                                           
+            dir('storage') {
+              sh "sh Fuse/testing_properties.sh ${propertiesboolean} ${jobname} ${ambiente} ${SERVER_DEPLOY} ${passworduserjenkinsqa}"
+            }
+              if ("${SERVER_DEPLOY}" == '10.21.61.183') {
+            dir('servicio') {
+              sh  '''
+              #!/bin/bash
+              if [ -d "/var/lib/jenkins/workspace/$jobname/servicio/files" ] 
+              then
+              echo ${jobname}
+              cd /var/lib/jenkins/workspace/${jobname}/servicio/files/properties/${ambiente}
+              nameproperties=$(echo $(ls))
+              echo \${propertiesboolean}
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193  jenkins@10.21.61.183 sh  /home/COOPEUCH1.CL/jenkins/script/testing_fileprofile.sh \${propertiesboolean} \$nameproperties \${profile}
+              else
+              echo "*************************************"
+              echo "SERVICIO NO TIENE ARCHIVO .PROPERTIES" 
+              echo "*************************************"                                             
+              fi
+                  '''
+          }
+        }
+          else if ("${SERVER_DEPLOY}" == '10.20.73.21')  {
+            dir('servicio') {
+              sh  '''
+              #!/bin/bash
+              if [ -d "/var/lib/jenkins/workspace/$jobname/servicio/files" ] 
+              then
+              echo ${jobname}
+              cd /var/lib/jenkins/workspace/${jobname}/servicio/files/properties/${ambiente}
+              nameproperties=$(echo $(ls))
+              echo \${propertiesboolean}
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193  jenkins@10.20.73.21 sh  /home/COOPEUCH1.CL/jenkins/script/testing_fileprofile.sh \${propertiesboolean} \$nameproperties \${profile}
+              else
+              echo "*************************************"
+              echo "SERVICIO NO TIENE ARCHIVO .PROPERTIES" 
+              echo "*************************************"                                             
+              fi
+                  '''
+          }
+        }
+          else if ("${SERVER_DEPLOY}" == '10.20.73.160')  {
+            dir('servicio') {
+              sh  '''
+              #!/bin/bash
+              if [ -d "/var/lib/jenkins/workspace/$jobname/servicio/files" ] 
+              then
+              echo ${jobname}
+              cd /var/lib/jenkins/workspace/${jobname}/servicio/files/properties/${ambiente}
+              nameproperties=$(echo $(ls))
+              echo \${propertiesboolean}
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193  jenkins@10.20.73.160 sh  /home/COOPEUCH1.CL/jenkins/script/testing_fileprofile.sh \${propertiesboolean} \$nameproperties \${profile}
+              else
+              echo "*************************************"
+              echo "SERVICIO NO TIENE ARCHIVO .PROPERTIES" 
+              echo "*************************************"                                             
+              fi
+                  '''
+           }
+         }
+       }          
+     }
+   }
+ }
+    stage('deploy fuse') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: 'jenkinsfuseqa', passwordVariable: 'password', usernameVariable: 'userpass')]) { 
+          script{    
+            dir('servicio') {         
+            print "SERVER DEPLOY : " + SERVER_DEPLOY
+            if ("${SERVER_DEPLOY}" == '10.21.61.183') {
+              sh  '''  
+              groupid=$(grep -oP '(?<=<groupId>)cl.*(?=</groupId)' pom.xml)
+              artefactid=$(grep -oP '(?<=<artifactId>)servicio.*(?=</artifactId)' pom.xml)
+              verion=$(grep -oP '(?<=<version>).*(?=</version)' pom.xml | head -n 1)
+              espacio=' '
+              parametros=$groupid$espacio$artefactid$espacio$verion
+              echo $parametros                         
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 jenkins@10.21.61.183 sh /home/COOPEUCH1.CL/jenkins/script/testing_jenkinsdeployfuse.sh \$parametros \${profile}
+                  '''
+            } 
+              else if ("${SERVER_DEPLOY}" == '10.20.73.21') {
+              sh  '''  
+              groupid=$(grep -oP '(?<=<groupId>)cl.*(?=</groupId)' pom.xml)
+              artefactid=$(grep -oP '(?<=<artifactId>)servicio.*(?=</artifactId)' pom.xml)
+              verion=$(grep -oP '(?<=<version>).*(?=</version)' pom.xml | head -n 1)
+              espacio=' '
+              parametros=$groupid$espacio$artefactid$espacio$verion
+              echo $parametros                                   
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 jenkins@10.20.73.21 sh /home/COOPEUCH1.CL/jenkins/script/testing_jenkinsdeployfuse.sh \$parametros \${profile}
+                  '''
+            }
+              else if ("${SERVER_DEPLOY}" == '10.20.73.160') {
+              sh  '''  
+              groupid=$(grep -oP '(?<=<groupId>)cl.*(?=</groupId)' pom.xml)
+              artefactid=$(grep -oP '(?<=<artifactId>)servicio.*(?=</artifactId)' pom.xml)
+              verion=$(grep -oP '(?<=<version>).*(?=</version)' pom.xml | head -n 1)
+              espacio=' '
+              parametros=$groupid$espacio$artefactid$espacio$verion
+              echo $parametros                                   
+              sshpass -p $passworduserjenkinsqa ssh -p 1313 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/10.21.61.193 jenkins@10.20.73.160 sh /home/COOPEUCH1.CL/jenkins/script/testing_jenkinsdeployfuse.sh \$parametros \${profile}
+                  '''
+              }                                       
+            }
+          }
+        }
+      }                                         
+    }  
+  }
+}
