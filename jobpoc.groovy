@@ -1,5 +1,5 @@
 job('lactm') {
   steps {
-    shell('echo Hello World!')
+    "echo Hello World"
   }
 }
