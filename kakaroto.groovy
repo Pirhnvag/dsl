@@ -11,6 +11,3 @@ def job = pipelineJob('kakaroto') {
   }    
 }
 def jobDescription = "job nueva logica de despliegues qa jenkins onprem"
-helpers.Build_Job_Helper.general_config_multisite_testing(job)
-helpers.Build_Job_Helper.addGitParameter_branch_testing(job,'PT_BRANCH','DESCENDING_SMART','.*','branch')
-helpers.Build_Job_Helper.general_config_qa(job, jobDescription)
