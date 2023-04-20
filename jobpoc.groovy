@@ -5,11 +5,13 @@ pipelineJob('job-poc') {
       sandbox()
     }
   }
-   parameters {
+  parameters {
                 activeChoiceParam('DESTINO') {
                   choiceType('SINGLE_SELECT')
                   groovyScript {
-                    script('["seleccione:selected", "q5a", "q7a"]')
+                    script("['seleccione:selected',' q1',' q5',' q6',' q7',' q8']")
+
+                                 
                     fallbackScript('return ["ERROR"]')
                 description('Selecciona el Destino del proyecto. (Campo obligatorio)')
                 }
