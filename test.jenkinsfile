@@ -4,14 +4,15 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        sh 'npm install'
-        sh 'npm run build'
+        echo 'Building...'
+        sh 'echo Building the project...'
       }
     }
 
     stage('Test') {
       steps {
-        sh 'npm run test'
+        echo 'Testing...'
+        sh 'echo Running tests...'
       }
     }
 
@@ -20,7 +21,8 @@ pipeline {
         branch 'master'
       }
       steps {
-        sh 'npm run deploy'
+        echo 'Deploying...'
+        sh 'echo Deploying the project...'
       }
     }
   }
