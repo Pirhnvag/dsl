@@ -19,7 +19,6 @@ pipeline {
       when {
         branch 'master'
       }
-
       steps {
         sh 'npm run deploy'
       }
