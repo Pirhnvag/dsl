@@ -4,15 +4,14 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        echo 'Building...'
-        sh 'echo Building the project...'
+        sh 'npm install'
+        sh 'npm run build'
       }
     }
 
     stage('Test') {
       steps {
-        echo 'Testing...'
-        sh 'echo Running tests...'
+        sh 'npm run test'
       }
     }
 
@@ -20,9 +19,9 @@ pipeline {
       when {
         branch 'master'
       }
+
       steps {
-        echo 'Deploying...'
-        sh 'echo Deploying the project...'
+        sh 'npm run deploy'
       }
     }
   }
